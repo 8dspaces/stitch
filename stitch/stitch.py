@@ -20,6 +20,7 @@ from pandocfilters import RawBlock, Div, CodeBlock, Image, Str, Para
 import pypandoc
 
 from .exc import StitchError
+from . import options as opt
 
 DISPLAY_PRIORITY = NbConvertBase().display_data_priority
 CODE = 'code'
@@ -41,7 +42,10 @@ class Stitch:
     Stores configuration variables.
     '''
 
-    def __init__(self, name, to='html', standalone=True,
+    _options = {'standalone', 'warning', 'on_error'}
+
+    def __init__(self, name, to='html',
+                 standalone=True,
                  warning=True,
                  on_error='continue'):
         '''
@@ -88,6 +92,33 @@ class Stitch:
         return self._kernel_pairs
 
     @property
+    def title(self):
+        return self._title
+
+    @title.setter
+    @opt.as_string()
+    def title(self, value):
+        self._title = value
+
+    @property
+    def standalone(self):
+        return self._standalone
+
+    @standalone.setter
+    @opt.as_bool()
+    def standalone(self, value):
+        self._standalone = value
+
+    @property
+    def warning(self):
+        return self._warning
+
+    @warning.setter
+    @opt.as_bool()
+    def warning(self, value):
+        self._warning = value
+
+    @property
     def on_error(self):
         '''
         How to handle errors in the code being executed. Must be one of
@@ -96,13 +127,9 @@ class Stitch:
         return self._on_error
 
     @on_error.setter
-    def on_error(self, on_error):
-        valid = {'continue', 'raise'}
-        if on_error not in valid:
-            msg = "`on_error` must be one of %s, got %s instead" % (valid,
-                                                                    on_error)
-            raise TypeError(msg)
-        self._on_error = on_error
+    @opt.as_choice({'continue', 'raise'})
+    def on_error(self, value):
+        self._on_error = value
 
     def get_kernel(self, kernel_name):
         '''
@@ -124,6 +151,14 @@ class Stitch:
             self.kernel_managers[kernel_name] = kp
         return kp
 
+    def parse_document_options(self, meta):
+        '''
+        Modifies self to update options, depending on the document.
+        '''
+        for attr, val in meta['unMeta'].items():
+            if attr in self._options:
+                setattr(self, attr, val)
+
     def stitch(self, source):
         '''
         Main method for converting a document.
@@ -140,6 +175,8 @@ class Stitch:
         '''
         source = preprocess(source)
         meta, blocks = tokenize(source)
+
+        self.parse_document_options(meta)
         new_blocks = []
 
         for i, block in enumerate(blocks):
